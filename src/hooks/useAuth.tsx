@@ -18,34 +18,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const hydrateSession = async () => {
+      const { data: { session: initialSession } } = await supabase.auth.getSession();
+
+      if (!initialSession) {
+        setSession(null);
+        setUser(null);
+        setLoading(false);
+        return;
+      }
+
+      // Use locally persisted session immediately, then validate/refresh in background.
+      setSession(initialSession);
+      setUser(initialSession.user ?? null);
+
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (!userError && userData.user) {
+        setUser(userData.user);
+        setLoading(false);
+        return;
+      }
+
+      // In production this can briefly return 401 during startup; refresh once before forcing logout.
+      const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
+      if (!refreshError && refreshed.session) {
+        setSession(refreshed.session);
+        setUser(refreshed.session.user ?? null);
+        setLoading(false);
+        return;
+      }
+
+      await supabase.auth.signOut();
+      setSession(null);
+      setUser(null);
+      setLoading(false);
+    };
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
     });
 
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (!session) {
-        setSession(null);
-        setUser(null);
-        setLoading(false);
-        return;
-      }
-
-      // `getSession` only reads local state; validate token with Auth server.
-      const { data: userData, error: userError } = await supabase.auth.getUser(session.access_token);
-      if (userError || !userData.user) {
-        await supabase.auth.signOut();
-        setSession(null);
-        setUser(null);
-        setLoading(false);
-        return;
-      }
-
-      setSession(session);
-      setUser(userData.user);
-      setLoading(false);
-    });
+    void hydrateSession();
 
     return () => subscription.unsubscribe();
   }, []);
