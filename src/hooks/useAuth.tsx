@@ -31,26 +31,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Use locally persisted session immediately, then validate/refresh in background.
       setSession(initialSession);
       setUser(initialSession.user ?? null);
-
-      const { data: userData, error: userError } = await supabase.auth.getUser();
-      if (!userError && userData.user) {
-        setUser(userData.user);
-        setLoading(false);
-        return;
-      }
-
-      // In production this can briefly return 401 during startup; refresh once before forcing logout.
-      const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
-      if (!refreshError && refreshed.session) {
-        setSession(refreshed.session);
-        setUser(refreshed.session.user ?? null);
-        setLoading(false);
-        return;
-      }
-
-      await supabase.auth.signOut();
-      setSession(null);
-      setUser(null);
+      // Don't hard-fail startup on /auth/v1/user 401. The auth client will
+      // refresh/rotate session as needed and emit updates via onAuthStateChange.
       setLoading(false);
     };
 
