@@ -1,0 +1,4 @@
+project_id = "ixfpwljvruppyyizrodm"
+
+[functions.sync-classroom]
+verify_jwt = false
